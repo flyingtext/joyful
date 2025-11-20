@@ -19,28 +19,12 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
-from rest_framework.routers import DefaultRouter
-
-from ai.views import AICaptionJobViewSet
-from photos.views import (
-    AlbumShareViewSet,
-    AlbumViewSet,
-    PhotoTagViewSet,
-    PhotoViewSet,
-    TagViewSet,
-)
-
-router = DefaultRouter()
-router.register(r"photos", PhotoViewSet, basename="photo")
-router.register(r"albums", AlbumViewSet, basename="album")
-router.register(r"tags", TagViewSet, basename="tag")
-router.register(r"album-shares", AlbumShareViewSet, basename="albumshare")
-router.register(r"photo-tags", PhotoTagViewSet, basename="phototag")
-router.register(r"ai/caption-jobs", AICaptionJobViewSet, basename="captionjob")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/", include(router.urls)),
+    path("api/photos/", include(("photos.urls", "photos"), namespace="photos")),
+    path("api/ai/", include(("ai.urls", "ai"), namespace="ai")),
+    path("api/users/", include(("users.urls", "users"), namespace="users")),
     path("api-auth/", include("rest_framework.urls")),
 ]
 
