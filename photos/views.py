@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from django.db.models import Q
-from rest_framework import permissions, viewsets
+from rest_framework import filters, permissions, viewsets
 from rest_framework.pagination import PageNumberPagination
 
 from photos.models import Album, AlbumShare, Photo, PhotoTag, PhotoVisibility, Tag
@@ -18,6 +18,27 @@ class StandardPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = "page_size"
     max_page_size = 100
+
+
+class PhotoAccessPermission(permissions.BasePermission):
+    def has_permission(self, request, view) -> bool:
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj) -> bool:
+        if getattr(obj, "owner", None) == getattr(request, "user", None):
+            return True
+        if request.method in permissions.SAFE_METHODS:
+            if getattr(obj, "visibility", None) == PhotoVisibility.PUBLIC:
+                return True
+            if (
+                getattr(obj, "visibility", None) == PhotoVisibility.SHARED
+                and request.user
+                and request.user.is_authenticated
+            ):
+                return True
+        return False
 
 
 class IsOwnerOrSharedReadOnly(permissions.BasePermission):
@@ -39,32 +60,42 @@ class IsOwnerOrSharedReadOnly(permissions.BasePermission):
         return False
 
 
+class PhotoFilterBackend(filters.BaseFilterBackend):
+    def filter_queryset(self, request, queryset, view):
+        owner_filter = request.query_params.get("owner")
+        visibility_filter = request.query_params.get("visibility")
+        tag_filter = request.query_params.get("tag")
+
+        if owner_filter:
+            queryset = queryset.filter(owner_id=owner_filter)
+        if visibility_filter:
+            queryset = queryset.filter(visibility=visibility_filter)
+        if tag_filter:
+            queryset = queryset.filter(photo_tags__tag__name__iexact=tag_filter)
+        return queryset
+
+
 class PhotoViewSet(viewsets.ModelViewSet):
     serializer_class = PhotoSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrSharedReadOnly]
+    permission_classes = [PhotoAccessPermission]
     pagination_class = StandardPagination
+    filter_backends = [PhotoFilterBackend]
 
     def get_queryset(self):
         user = self.request.user
-        queryset = (
-            Photo.objects.select_related("owner")
-            .prefetch_related("photo_tags__tag")
-            .filter(
-                Q(owner=user)
-                | Q(visibility=PhotoVisibility.PUBLIC)
-                | Q(visibility=PhotoVisibility.SHARED)
-            )
-        )
-        owner_filter = self.request.query_params.get("owner")
-        tag_filter = self.request.query_params.get("tag")
-        if owner_filter:
-            queryset = queryset.filter(owner_id=owner_filter)
-        if tag_filter:
-            queryset = queryset.filter(photo_tags__tag__name__iexact=tag_filter)
-        return queryset.distinct()
+        visibility_filter = Q(visibility=PhotoVisibility.PUBLIC)
+        shared_filter = Q(visibility=PhotoVisibility.SHARED)
 
-    def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+        queryset = Photo.objects.select_related("owner").prefetch_related(
+            "photo_tags__tag"
+        )
+
+        if user and user.is_authenticated:
+            queryset = queryset.filter(Q(owner=user) | visibility_filter | shared_filter)
+        else:
+            queryset = queryset.filter(visibility_filter)
+
+        return queryset.distinct()
 
 
 class AlbumViewSet(viewsets.ModelViewSet):

@@ -42,13 +42,22 @@ class PhotoSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "owner",
-            "file_path",
-            "thumbnail_path",
+            "file",
+            "thumbnail",
             "title",
             "description",
             "width",
             "height",
             "taken_at",
+            "camera_make",
+            "camera_model",
+            "lens_model",
+            "aperture",
+            "shutter_speed",
+            "focal_length",
+            "iso",
+            "latitude",
+            "longitude",
             "location",
             "visibility",
             "storage_backend",
@@ -58,7 +67,13 @@ class PhotoSerializer(serializers.ModelSerializer):
             "tags",
             "tag_names",
         ]
-        read_only_fields = ["id", "checksum", "created_at", "thumbnail_path"]
+        read_only_fields = [
+            "id",
+            "checksum",
+            "created_at",
+            "thumbnail",
+            "file",
+        ]
 
     def validate_visibility(self, value: str) -> str:
         if value not in PhotoVisibility.values:
@@ -79,12 +94,14 @@ class PhotoSerializer(serializers.ModelSerializer):
             )
         return attrs
 
-    def _save_file(self, uploaded_file) -> tuple[str, str]:
+    def _prepare_file(self, uploaded_file) -> tuple[str, str]:
         content = uploaded_file.read()
         checksum = hashlib.sha256(content).hexdigest()
         uploaded_file.seek(0)
-        filename = default_storage.save(os.path.join("photos", uploaded_file.name), uploaded_file)
-        return filename, checksum
+        storage_path = default_storage.save(
+            os.path.join("photos", "originals", uploaded_file.name), uploaded_file
+        )
+        return storage_path, checksum
 
     def _sync_tags(self, photo: Photo, tag_names: Iterable[str]) -> None:
         normalized = [name.strip() for name in tag_names if name.strip()]
@@ -105,8 +122,8 @@ class PhotoSerializer(serializers.ModelSerializer):
         tag_names = validated_data.pop("tags", [])
         owner = self.context["request"].user
         if uploaded_file:
-            file_path, checksum = self._save_file(uploaded_file)
-            validated_data["file_path"] = file_path
+            storage_path, checksum = self._prepare_file(uploaded_file)
+            validated_data["file"] = storage_path
             validated_data["checksum"] = checksum
         with transaction.atomic():
             photo = Photo.objects.create(owner=owner, **validated_data)
@@ -118,8 +135,8 @@ class PhotoSerializer(serializers.ModelSerializer):
         uploaded_file = validated_data.pop("uploaded_file", None)
         tag_names = validated_data.pop("tags", None)
         if uploaded_file:
-            file_path, checksum = self._save_file(uploaded_file)
-            validated_data["file_path"] = file_path
+            storage_path, checksum = self._prepare_file(uploaded_file)
+            validated_data["file"] = storage_path
             validated_data["checksum"] = checksum
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
