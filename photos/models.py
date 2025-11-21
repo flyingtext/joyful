@@ -27,13 +27,26 @@ class Photo(models.Model):
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="photos"
     )
-    file_path = models.CharField(max_length=512)
-    thumbnail_path = models.CharField(max_length=512, blank=True)
+    file = models.FileField(
+        max_length=512, upload_to="photos/originals/", null=True
+    )
+    thumbnail = models.ImageField(
+        max_length=512, upload_to="photos/thumbnails/", blank=True, null=True
+    )
     title = models.CharField(max_length=255, blank=True)
     description = models.TextField(blank=True)
     width = models.PositiveIntegerField(null=True, blank=True)
     height = models.PositiveIntegerField(null=True, blank=True)
     taken_at = models.DateTimeField(null=True, blank=True)
+    camera_make = models.CharField(max_length=255, blank=True)
+    camera_model = models.CharField(max_length=255, blank=True)
+    lens_model = models.CharField(max_length=255, blank=True)
+    aperture = models.CharField(max_length=50, blank=True)
+    shutter_speed = models.CharField(max_length=50, blank=True)
+    focal_length = models.CharField(max_length=50, blank=True)
+    iso = models.PositiveIntegerField(null=True, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     location = models.CharField(max_length=255, blank=True)
     visibility = models.CharField(
         max_length=20, choices=PhotoVisibility.choices, default=PhotoVisibility.PRIVATE
